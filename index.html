@@ -75,17 +75,38 @@
     #app-screen { display: none; }
 
     header {
-      display: flex;
-      align-items: center;
-      gap: 12px;
-      padding: 12px 20px;
       border-bottom: 0.5px solid var(--border);
       background: var(--bg);
       position: sticky;
       top: 0;
       z-index: 10;
     }
-    header h1 { font-size: 15px; font-weight: 600; flex: 1; }
+    .header-top {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 12px 20px;
+    }
+    .header-top h1 { font-size: 15px; font-weight: 600; flex: 1; }
+    .header-detail {
+      display: none;
+      align-items: center;
+      gap: 8px;
+      padding: 8px 20px;
+      border-top: 0.5px solid var(--border);
+      flex-wrap: wrap;
+    }
+    .header-detail.visible { display: flex; }
+    .header-detail label { font-size: 13px; color: var(--text2); }
+    .header-detail select {
+      font-size: 13px; padding: 4px 8px;
+      border: 0.5px solid var(--border2); border-radius: var(--radius);
+      background: var(--bg); color: var(--text); cursor: pointer;
+    }
+    .token-title {
+      font-size: 13px; font-weight: 500;
+      font-family: var(--mono); flex: 1;
+    }
     .user-info { font-size: 12px; color: var(--text3); }
     .btn-signout {
       font-size: 12px; color: var(--text2);
@@ -126,6 +147,14 @@
       border-radius: var(--radius); padding: 3px 8px; cursor: pointer;
     }
     .back-btn:hover { background: var(--bg2); }
+    .nav-btn {
+      font-size: 12px; color: var(--text2);
+      background: none; border: 0.5px solid var(--border2);
+      border-radius: var(--radius); padding: 3px 8px; cursor: pointer;
+    }
+    .nav-btn:hover:not(:disabled) { background: var(--bg2); }
+    .nav-btn:disabled { opacity: 0.35; cursor: default; }
+    .nav-group { display: flex; gap: 2px; }
 
     /* ── Token list ── */
     .section-title {
@@ -243,10 +272,22 @@
 <!-- APP -->
 <div id="app-screen">
   <header>
-    <h1>BBB Tokens</h1>
-    <span class="user-info" id="user-name"></span>
-    <button class="btn-refresh" onclick="refreshData()">↺ Refresh</button>
-    <button class="btn-signout" onclick="signOut()">Sign out</button>
+    <div class="header-top">
+      <h1>BBB Tokens</h1>
+      <span class="user-info" id="user-name"></span>
+      <button class="btn-refresh" onclick="refreshData()">↺ Refresh</button>
+      <button class="btn-signout" onclick="signOut()">Sign out</button>
+    </div>
+    <div class="header-detail" id="header-detail">
+      <button class="back-btn" onclick="selectedToken=null;renderApp()">↑ tokens</button>
+      <div class="nav-group">
+        <button class="nav-btn" id="btn-prev" onclick="navigateToken(-1)">← prev</button>
+        <button class="nav-btn" id="btn-next" onclick="navigateToken(1)">next →</button>
+      </div>
+      <span class="token-title" id="header-token-title"></span>
+      <label>Language</label>
+      <select id="lang-select" onchange="mainLang=this.value;renderApp()"></select>
+    </div>
   </header>
   <main id="main-content"></main>
 </div>
@@ -497,16 +538,41 @@ function renderDetail(tokenName) {
   }).join('');
 }
 
-function render() {
+function navigateToken(dir) {
+  if (!appData) return;
+  const keys = Object.keys(appData.tokens).filter(t => t.toLowerCase().includes(filterText.toLowerCase()));
+  const idx = keys.indexOf(selectedToken);
+  const next = idx + dir;
+  if (next >= 0 && next < keys.length) {
+    selectedToken = keys[next];
+    renderApp();
+    window.scrollTo(0, 0);
+  }
+}
+
+function render() { renderApp(); }
+
+function renderApp() {
   const el = document.getElementById('main-content');
   if (!appData) { el.innerHTML = ''; return; }
 
   const { tokens } = appData;
+  const headerDetail = document.getElementById('header-detail');
+  const headerTokenTitle = document.getElementById('header-token-title');
+  const langSelect = document.getElementById('lang-select');
 
-  const langOptions = LANGS.map(l => {
-    const has = langHasData(l);
-    return `<option value="${l}" ${mainLang===l?'selected':''} ${!has?'disabled':''}>${LANG_LABELS[l]}${!has?' (no data)':''}</option>`;
-  }).join('');
+  // Populate language select (only once if options already there)
+  if (langSelect.options.length === 0) {
+    LANGS.forEach(l => {
+      const has = langHasData(l);
+      const opt = document.createElement('option');
+      opt.value = l;
+      opt.textContent = LANG_LABELS[l] + (has ? '' : ' (no data)');
+      opt.disabled = !has;
+      langSelect.appendChild(opt);
+    });
+  }
+  langSelect.value = mainLang;
 
   const refOptions = `<option value="">— none —</option>` + LANGS.map(l => {
     if (l === mainLang) return '';
@@ -515,28 +581,39 @@ function render() {
   }).join('');
 
   if (selectedToken) {
+    // Show detail toolbar in header
+    headerDetail.classList.add('visible');
+    headerTokenTitle.textContent = selectedToken;
+
+    // Prev/next state
+    const keys = Object.keys(tokens).filter(t => t.toLowerCase().includes(filterText.toLowerCase()));
+    const idx = keys.indexOf(selectedToken);
+    document.getElementById('btn-prev').disabled = idx <= 0;
+    document.getElementById('btn-next').disabled = idx >= keys.length - 1;
+
     const tok = tokens[selectedToken];
     const count = (appData.textsByToken[selectedToken] || []).length;
     const badge = tok.type === 'per_char'
       ? `<span class="token-badge badge-char">per character</span>`
       : `<span class="token-badge badge-single">single</span>`;
+
     el.innerHTML = `
-      <div class="toolbar">
-        <button class="back-btn" onclick="selectedToken=null;render()">← tokens</button>
-        <label>Source language</label>
-        <select onchange="mainLang=this.value;render()">${langOptions}</select>
-        <label>Translation</label>
-        <select onchange="refLang=this.value||null;render()">${refOptions}</select>
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:16px">
+        ${badge}
+        <span class="count-tag">${count} string${count!==1?'s':''}</span>
+        <div style="margin-left:auto">
+          <label style="font-size:13px;color:var(--text2);margin-right:6px">Translation reference</label>
+          <select onchange="refLang=this.value||null;renderApp()">${refOptions}</select>
+        </div>
       </div>
       <div class="detail-panel">
-        <div class="detail-header">
-          <h2>${selectedToken}</h2>
-          ${badge}
-          <span class="count-tag">${count} string${count!==1?'s':''}</span>
-        </div>
         ${renderDetail(selectedToken)}
       </div>`;
   } else {
+    // Hide detail toolbar
+    headerDetail.classList.remove('visible');
+    headerTokenTitle.textContent = '';
+
     const tokenKeys = Object.keys(tokens).filter(t => t.toLowerCase().includes(filterText.toLowerCase()));
     const listHTML = tokenKeys.length
       ? tokenKeys.map(t => {
@@ -544,7 +621,7 @@ function render() {
           const badge = tokens[t].type === 'per_char'
             ? `<span class="token-badge badge-char">per character</span>`
             : `<span class="token-badge badge-single">single</span>`;
-          return `<button class="token-pill" onclick="selectedToken='${t}';render()">
+          return `<button class="token-pill" onclick="selectedToken='${t}';renderApp()">
             <span class="token-name">${t}</span>
             ${badge}
             <span class="count-tag">${count} string${count!==1?'s':''}</span>
@@ -555,9 +632,7 @@ function render() {
     el.innerHTML = `
       <div class="toolbar">
         <input class="search-box" type="search" placeholder="Search token…"
-          value="${filterText}" oninput="filterText=this.value;render()">
-        <label>Language</label>
-        <select onchange="mainLang=this.value;render()">${langOptions}</select>
+          value="${filterText}" oninput="filterText=this.value;renderApp()">
       </div>
       <p class="section-title">${Object.keys(tokens).length} tokens · click to see contexts</p>
       <div class="token-list">${listHTML}</div>`;
