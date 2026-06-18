@@ -1,0 +1,578 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>BBB Tokens</title>
+  <script src="https://accounts.google.com/gsi/client" async defer></script>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg: #ffffff;
+      --bg2: #f7f7f6;
+      --bg3: #f0f0ef;
+      --border: #e5e5e4;
+      --border2: #d4d4d3;
+      --text: #1a1a1a;
+      --text2: #555553;
+      --text3: #999997;
+      --blue: #185FA5;
+      --blue-bg: #E6F1FB;
+      --green: #0F6E56;
+      --green-bg: #EAF3DE;
+      --green-label: #3B6D11;
+      --token-color: #185FA5;
+      --subst-color: #0F6E56;
+      --radius: 6px;
+      --radius-lg: 8px;
+      --font: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      --mono: 'SF Mono', 'Fira Code', 'Cascadia Code', monospace;
+    }
+
+    body {
+      font-family: var(--font);
+      background: var(--bg);
+      color: var(--text);
+      font-size: 14px;
+      line-height: 1.5;
+    }
+
+    /* ── Login screen ── */
+    #login-screen {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      min-height: 100vh;
+      gap: 24px;
+      padding: 2rem;
+    }
+    #login-screen h1 { font-size: 22px; font-weight: 600; }
+    #login-screen p { color: var(--text2); font-size: 14px; text-align: center; max-width: 340px; }
+    #login-error { color: #c0392b; font-size: 13px; display: none; }
+
+    /* ── Loading screen ── */
+    #loading-screen {
+      display: none;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      min-height: 100vh;
+      gap: 12px;
+      color: var(--text2);
+    }
+    .spinner {
+      width: 28px; height: 28px;
+      border: 2.5px solid var(--border);
+      border-top-color: var(--blue);
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    /* ── Main app ── */
+    #app-screen { display: none; }
+
+    header {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 12px 20px;
+      border-bottom: 0.5px solid var(--border);
+      background: var(--bg);
+      position: sticky;
+      top: 0;
+      z-index: 10;
+    }
+    header h1 { font-size: 15px; font-weight: 600; flex: 1; }
+    .user-info { font-size: 12px; color: var(--text3); }
+    .btn-signout {
+      font-size: 12px; color: var(--text2);
+      background: none; border: 0.5px solid var(--border2);
+      border-radius: var(--radius); padding: 3px 8px; cursor: pointer;
+    }
+    .btn-signout:hover { background: var(--bg2); }
+    .btn-refresh {
+      font-size: 12px; color: var(--text2);
+      background: none; border: 0.5px solid var(--border2);
+      border-radius: var(--radius); padding: 3px 8px; cursor: pointer;
+    }
+    .btn-refresh:hover { background: var(--bg2); }
+
+    main { max-width: 780px; margin: 0 auto; padding: 20px 20px 60px; }
+
+    /* ── Toolbar ── */
+    .toolbar {
+      display: flex; gap: 8px; align-items: center;
+      flex-wrap: wrap; margin-bottom: 16px;
+    }
+    .toolbar label { font-size: 13px; color: var(--text2); }
+    .toolbar select {
+      font-size: 13px; padding: 4px 8px;
+      border: 0.5px solid var(--border2); border-radius: var(--radius);
+      background: var(--bg); color: var(--text); cursor: pointer;
+    }
+    .search-box {
+      flex: 1; min-width: 160px; font-size: 13px;
+      padding: 6px 10px;
+      border: 0.5px solid var(--border2); border-radius: var(--radius);
+      background: var(--bg); color: var(--text);
+    }
+    .search-box:focus { outline: none; box-shadow: 0 0 0 2px var(--blue-bg); }
+    .back-btn {
+      font-size: 12px; color: var(--text2);
+      background: none; border: 0.5px solid var(--border2);
+      border-radius: var(--radius); padding: 3px 8px; cursor: pointer;
+    }
+    .back-btn:hover { background: var(--bg2); }
+
+    /* ── Token list ── */
+    .section-title {
+      font-size: 11px; text-transform: uppercase;
+      letter-spacing: 0.08em; color: var(--text3);
+      margin-bottom: 8px; padding-left: 2px;
+    }
+    .token-list { display: flex; flex-direction: column; gap: 2px; }
+    .token-pill {
+      display: flex; align-items: center; gap: 8px;
+      padding: 8px 12px;
+      border: 0.5px solid var(--border); border-radius: var(--radius);
+      background: var(--bg); cursor: pointer;
+      text-align: left; width: 100%;
+      transition: background 0.1s;
+    }
+    .token-pill:hover { background: var(--bg2); }
+    .token-name {
+      font-size: 13px; font-weight: 500;
+      font-family: var(--mono); color: var(--text);
+    }
+    .token-badge {
+      font-size: 11px; padding: 2px 7px;
+      border-radius: 20px; margin-left: auto; white-space: nowrap;
+    }
+    .badge-single { background: var(--green-bg); color: var(--green-label); }
+    .badge-char   { background: var(--blue-bg);  color: var(--blue); }
+    .count-tag { font-size: 11px; color: var(--text3); margin-left: 4px; }
+
+    /* ── Detail panel ── */
+    .detail-panel {
+      border: 0.5px solid var(--border);
+      border-radius: var(--radius-lg); overflow: hidden;
+    }
+    .detail-header {
+      padding: 12px 16px;
+      border-bottom: 0.5px solid var(--border);
+      background: var(--bg2);
+      display: flex; align-items: center; gap: 10px;
+    }
+    .detail-header h2 {
+      font-size: 15px; font-weight: 500;
+      font-family: var(--mono);
+    }
+
+    .context-card { border-bottom: 0.5px solid var(--border); }
+    .context-card:last-child { border-bottom: none; }
+    .context-id {
+      font-size: 11px; font-family: var(--mono);
+      color: var(--text3);
+      padding: 10px 16px 6px;
+      background: var(--bg2);
+    }
+    .context-body { padding: 8px 16px 14px; }
+
+    .row-kit {
+      display: flex; gap: 10px; align-items: baseline; padding: 4px 0;
+    }
+    .lang-label {
+      font-size: 11px; color: var(--text3);
+      min-width: 52px; font-family: var(--mono);
+    }
+    .kit-text { font-size: 14px; color: var(--text2); }
+    .kit-token { color: var(--token-color); font-weight: 500; }
+
+    .rendered-block { margin-top: 4px; }
+    .char-row { display: flex; gap: 10px; align-items: baseline; padding: 3px 0; }
+    .char-label {
+      font-size: 11px; color: var(--text3);
+      min-width: 52px; font-family: var(--mono);
+    }
+    .char-text { font-size: 14px; color: var(--text); }
+    .subst { color: var(--subst-color); font-weight: 500; }
+    .unknown-token { color: var(--text3); opacity: 0.6; }
+
+    .single-rendered { font-size: 14px; color: var(--text); padding: 4px 0; }
+
+    .ref-section {
+      margin-top: 10px; padding-top: 10px;
+      border-top: 0.5px solid var(--border);
+    }
+    .ref-lang-label {
+      font-size: 11px; color: var(--text3);
+      font-family: var(--mono); margin-bottom: 4px;
+    }
+
+    .missing { color: var(--text3); font-style: italic; font-size: 12px; }
+    .empty-state {
+      padding: 2rem; text-align: center;
+      color: var(--text2); font-size: 14px;
+    }
+  </style>
+</head>
+<body>
+
+<!-- LOGIN -->
+<div id="login-screen">
+  <h1>BBB Tokens</h1>
+  <p>Sign in with your Google account to preview token substitutions in the localization sheet.</p>
+  <div id="g_id_onload"
+    data-client_id="547283779004-9ffdpnrr1he9oiug4nno7f3epkb5ft6k.apps.googleusercontent.com"
+    data-callback="onGoogleSignIn"
+    data-auto_prompt="false">
+  </div>
+  <div class="g_id_signin" data-type="standard" data-size="large" data-theme="outline" data-text="sign_in_with" data-shape="rectangular"></div>
+  <p id="login-error"></p>
+</div>
+
+<!-- LOADING -->
+<div id="loading-screen">
+  <div class="spinner"></div>
+  <span>Loading sheet data…</span>
+</div>
+
+<!-- APP -->
+<div id="app-screen">
+  <header>
+    <h1>BBB Tokens</h1>
+    <span class="user-info" id="user-name"></span>
+    <button class="btn-refresh" onclick="refreshData()">↺ Refresh</button>
+    <button class="btn-signout" onclick="signOut()">Sign out</button>
+  </header>
+  <main id="main-content"></main>
+</div>
+
+<script>
+const CLIENT_ID   = '547283779004-9ffdpnrr1he9oiug4nno7f3epkb5ft6k.apps.googleusercontent.com';
+const SHEET_ID    = '1LF_yEUvFdcVpxGxQKZWryDnmHqhuB5EUwsVQhgko_fk';
+const SHEET_TEXTS = 'Textos';
+const SHEET_TOKENS = 'Tokens';
+const SCOPE       = 'https://www.googleapis.com/auth/spreadsheets.readonly';
+
+const LANGS = ['en-US','es-ES','zh-CN','es-MX','ja','ko','fr-FR','de-DE','it-IT','pt-BR','ru','pl','nl'];
+const LANG_LABELS = {
+  'en-US':'English','es-ES':'Español (ES)','zh-CN':'中文 (简体)',
+  'es-MX':'Español (MX)','ja':'日本語','ko':'한국어','fr-FR':'Français',
+  'de-DE':'Deutsch','it-IT':'Italiano','pt-BR':'Português (BR)',
+  'ru':'Русский','pl':'Polski','nl':'Nederlands'
+};
+const CHARACTERS = ['bear','bird','bunny','cat','dog','frog','laika','rat','racoon','cricket'];
+const TOKEN_RE = /\$[A-Za-z0-9_]+/g;
+
+let accessToken = null;
+let appData = null;
+let selectedToken = null;
+let mainLang = 'en-US';
+let refLang = null;
+let filterText = '';
+
+// ── Auth ──────────────────────────────────────────────────────────────────
+
+function onGoogleSignIn(response) {
+  // Exchange id_token for access token via token client
+  const tokenClient = google.accounts.oauth2.initTokenClient({
+    client_id: CLIENT_ID,
+    scope: SCOPE,
+    callback: (tokenResponse) => {
+      if (tokenResponse.error) {
+        showLoginError('Authentication error: ' + tokenResponse.error);
+        return;
+      }
+      accessToken = tokenResponse.access_token;
+      // decode name from id_token
+      try {
+        const payload = JSON.parse(atob(response.credential.split('.')[1]));
+        document.getElementById('user-name').textContent = payload.email || '';
+      } catch(e) {}
+      loadData();
+    }
+  });
+  tokenClient.requestAccessToken({ prompt: '' });
+}
+
+function signOut() {
+  google.accounts.id.disableAutoSelect();
+  accessToken = null;
+  appData = null;
+  selectedToken = null;
+  show('login-screen');
+}
+
+function showLoginError(msg) {
+  const el = document.getElementById('login-error');
+  el.textContent = msg;
+  el.style.display = 'block';
+}
+
+// ── Data loading ──────────────────────────────────────────────────────────
+
+async function fetchSheet(range) {
+  const url = `https://sheets.googleapis.com/v4/spreadsheets/${SHEET_ID}/values/${encodeURIComponent(range)}`;
+  const res = await fetch(url, {
+    headers: { Authorization: `Bearer ${accessToken}` }
+  });
+  if (!res.ok) throw new Error(`Sheets API error: ${res.status}`);
+  const json = await res.json();
+  return json.values || [];
+}
+
+async function loadData() {
+  show('loading-screen');
+  try {
+    const [textsRows, tokensRows] = await Promise.all([
+      fetchSheet(SHEET_TEXTS),
+      fetchSheet(SHEET_TOKENS)
+    ]);
+    appData = parseData(textsRows, tokensRows);
+    show('app-screen');
+    render();
+  } catch(e) {
+    show('login-screen');
+    showLoginError('Could not load sheet: ' + e.message);
+  }
+}
+
+async function refreshData() {
+  if (!accessToken) return;
+  show('loading-screen');
+  try {
+    const [textsRows, tokensRows] = await Promise.all([
+      fetchSheet(SHEET_TEXTS),
+      fetchSheet(SHEET_TOKENS)
+    ]);
+    appData = parseData(textsRows, tokensRows);
+    show('app-screen');
+    render();
+  } catch(e) {
+    show('login-screen');
+    showLoginError('Could not refresh sheet: ' + e.message);
+  }
+}
+
+function parseData(textsRows, tokensRows) {
+  // ── Parse Tokens sheet ──
+  const tokHeader = textsRows[0] ? tokensRows[0] : [];
+  const tokLangIdx = {};
+  LANGS.forEach(l => { const i = tokensRows[0]?.indexOf(l); if (i > -1) tokLangIdx[l] = i; });
+  const tokArgIdx   = tokensRows[0]?.indexOf('Argumentos') ?? -1;
+  const tokActorIdx = tokensRows[0]?.indexOf('Actores') ?? -1;
+
+  const tokens = {};
+  for (let i = 1; i < tokensRows.length; i++) {
+    const row = tokensRows[i];
+    const arg   = row[tokArgIdx]?.trim() || '';
+    const actor = row[tokActorIdx]?.trim() || '';
+    if (!arg.startsWith('$')) continue;
+    const hasValue = Object.values(tokLangIdx).some(idx => row[idx]?.trim());
+    if (!hasValue) continue;
+
+    if (actor) {
+      if (!tokens[arg]) tokens[arg] = { type: 'per_char', values: Object.fromEntries(LANGS.map(l => [l, {}])) };
+      LANGS.forEach(l => {
+        const idx = tokLangIdx[l];
+        if (idx !== undefined) tokens[arg].values[l][actor] = row[idx]?.trim() || '';
+      });
+    } else {
+      if (!tokens[arg]) tokens[arg] = { type: 'single', values: Object.fromEntries(LANGS.map(l => [l, ''])) };
+      LANGS.forEach(l => {
+        const idx = tokLangIdx[l];
+        if (idx !== undefined) tokens[arg].values[l] = row[idx]?.trim() || '';
+      });
+    }
+  }
+
+  // ── Parse Texts sheet ──
+  const txtLangIdx = {};
+  LANGS.forEach(l => { const i = textsRows[0]?.indexOf(l); if (i > -1) txtLangIdx[l] = i; });
+  const txtLocaIdx = textsRows[0]?.indexOf('LocaID') ?? -1;
+
+  const textsByToken = Object.fromEntries(Object.keys(tokens).map(t => [t, []]));
+
+  for (let i = 1; i < textsRows.length; i++) {
+    const row = textsRows[i];
+    const loca = row[txtLocaIdx]?.trim() || '';
+    if (!loca) continue;
+
+    const texts = {};
+    const foundTokens = new Set();
+    LANGS.forEach(l => {
+      const idx = txtLangIdx[l];
+      const val = (idx !== undefined ? row[idx]?.trim() : '') || '';
+      texts[l] = val;
+      (val.match(TOKEN_RE) || []).forEach(t => foundTokens.add(t));
+    });
+
+    foundTokens.forEach(tok => {
+      if (textsByToken[tok]) textsByToken[tok].push({ locaID: loca, texts });
+    });
+  }
+
+  return { tokens, textsByToken, availLangs: Object.keys(txtLangIdx) };
+}
+
+// ── Rendering ─────────────────────────────────────────────────────────────
+
+function textNeedsPerChar(text) {
+  return (text.match(TOKEN_RE) || []).some(m => appData.tokens[m]?.type === 'per_char');
+}
+
+function renderSubstituted(text, lang, charName) {
+  if (!text) return '';
+  const parts = [];
+  let last = 0;
+  for (const m of [...text.matchAll(/\$[A-Za-z0-9_]+/g)]) {
+    if (m.index > last) parts.push(text.slice(last, m.index));
+    const tok = appData.tokens[m[0]];
+    if (!tok) {
+      parts.push(`<span class="unknown-token">${m[0]}</span>`);
+    } else if (tok.type === 'single') {
+      parts.push(`<span class="subst">${tok.values[lang] || m[0]}</span>`);
+    } else {
+      const val = charName ? (tok.values[lang]?.[charName] || m[0]) : m[0];
+      parts.push(`<span class="subst">${val}</span>`);
+    }
+    last = m.index + m[0].length;
+  }
+  if (last < text.length) parts.push(text.slice(last));
+  return parts.join('');
+}
+
+function highlightTokens(text) {
+  if (!text) return '<span class="missing">no translation</span>';
+  return text.replace(TOKEN_RE, m => `<span class="kit-token">${m}</span>`);
+}
+
+function langHasData(lang) {
+  if (!appData) return false;
+  if (lang === 'en-US') return true;
+  return appData.availLangs.includes(lang);
+}
+
+function renderContextBlock(entry, lang) {
+  const kitText = entry.texts[lang] || '';
+  const needsPerChar = textNeedsPerChar(kitText);
+  let renderedBlock = '';
+  if (needsPerChar) {
+    renderedBlock = `<div class="rendered-block">${
+      CHARACTERS.map(char => `<div class="char-row">
+        <span class="char-label">${char}</span>
+        <span class="char-text">${renderSubstituted(kitText, lang, char)}</span>
+      </div>`).join('')
+    }</div>`;
+  } else {
+    renderedBlock = `<div class="single-rendered">${renderSubstituted(kitText, lang, null)}</div>`;
+  }
+  return `
+    <div class="row-kit">
+      <span class="lang-label">${lang}</span>
+      <span class="kit-text">${highlightTokens(kitText)}</span>
+    </div>
+    ${renderedBlock}`;
+}
+
+function renderDetail(tokenName) {
+  const entries = appData.textsByToken[tokenName] || [];
+  if (!entries.length) return `<div class="empty-state">This token doesn't appear in any string in «Textos».</div>`;
+  return entries.map(entry => {
+    const refBlock = refLang ? `<div class="ref-section">
+      <div class="ref-lang-label">${LANG_LABELS[refLang] || refLang} (translation reference)</div>
+      ${renderContextBlock(entry, refLang)}
+    </div>` : '';
+    return `<div class="context-card">
+      <div class="context-id">${entry.locaID}</div>
+      <div class="context-body">
+        ${renderContextBlock(entry, mainLang)}
+        ${refBlock}
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function render() {
+  const el = document.getElementById('main-content');
+  if (!appData) { el.innerHTML = ''; return; }
+
+  const { tokens } = appData;
+
+  const langOptions = LANGS.map(l => {
+    const has = langHasData(l);
+    return `<option value="${l}" ${mainLang===l?'selected':''} ${!has?'disabled':''}>${LANG_LABELS[l]}${!has?' (no data)':''}</option>`;
+  }).join('');
+
+  const refOptions = `<option value="">— none —</option>` + LANGS.map(l => {
+    if (l === mainLang) return '';
+    const has = langHasData(l);
+    return `<option value="${l}" ${refLang===l?'selected':''} ${!has?'disabled':''}>${LANG_LABELS[l]}${!has?' (no data)':''}</option>`;
+  }).join('');
+
+  if (selectedToken) {
+    const tok = tokens[selectedToken];
+    const count = (appData.textsByToken[selectedToken] || []).length;
+    const badge = tok.type === 'per_char'
+      ? `<span class="token-badge badge-char">per character</span>`
+      : `<span class="token-badge badge-single">single</span>`;
+    el.innerHTML = `
+      <div class="toolbar">
+        <button class="back-btn" onclick="selectedToken=null;render()">← tokens</button>
+        <label>Source language</label>
+        <select onchange="mainLang=this.value;render()">${langOptions}</select>
+        <label>Translation</label>
+        <select onchange="refLang=this.value||null;render()">${refOptions}</select>
+      </div>
+      <div class="detail-panel">
+        <div class="detail-header">
+          <h2>${selectedToken}</h2>
+          ${badge}
+          <span class="count-tag">${count} string${count!==1?'s':''}</span>
+        </div>
+        ${renderDetail(selectedToken)}
+      </div>`;
+  } else {
+    const tokenKeys = Object.keys(tokens).filter(t => t.toLowerCase().includes(filterText.toLowerCase()));
+    const listHTML = tokenKeys.length
+      ? tokenKeys.map(t => {
+          const count = (appData.textsByToken[t] || []).length;
+          const badge = tokens[t].type === 'per_char'
+            ? `<span class="token-badge badge-char">per character</span>`
+            : `<span class="token-badge badge-single">single</span>`;
+          return `<button class="token-pill" onclick="selectedToken='${t}';render()">
+            <span class="token-name">${t}</span>
+            ${badge}
+            <span class="count-tag">${count} string${count!==1?'s':''}</span>
+          </button>`;
+        }).join('')
+      : '<div class="empty-state">No tokens match.</div>';
+
+    el.innerHTML = `
+      <div class="toolbar">
+        <input class="search-box" type="search" placeholder="Search token…"
+          value="${filterText}" oninput="filterText=this.value;render()">
+        <label>Language</label>
+        <select onchange="mainLang=this.value;render()">${langOptions}</select>
+      </div>
+      <p class="section-title">${Object.keys(tokens).length} tokens · click to see contexts</p>
+      <div class="token-list">${listHTML}</div>`;
+  }
+}
+
+// ── Utilities ─────────────────────────────────────────────────────────────
+
+function show(id) {
+  ['login-screen','loading-screen','app-screen'].forEach(s => {
+    document.getElementById(s).style.display = s === id
+      ? (s === 'loading-screen' ? 'flex' : 'block')
+      : 'none';
+  });
+}
+</script>
+</body>
+</html>
