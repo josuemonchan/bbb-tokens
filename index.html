@@ -86,6 +86,8 @@
       align-items: center;
       gap: 12px;
       padding: 12px 20px;
+      max-width: 780px;
+      margin: 0 auto;
     }
     .header-top h1 { font-size: 15px; font-weight: 600; flex: 1; }
     .header-detail {
@@ -95,6 +97,8 @@
       padding: 8px 20px;
       border-top: 0.5px solid var(--border);
       flex-wrap: wrap;
+      max-width: 780px;
+      margin: 0 auto;
     }
     .header-detail.visible { display: flex; }
     .header-detail label { font-size: 13px; color: var(--text2); }
@@ -220,32 +224,47 @@
     .kit-text { font-size: 14px; color: var(--text2); }
     .kit-token { color: var(--token-color); font-weight: 500; }
 
-    .rendered-block { margin-top: 4px; }
-    .char-row { display: flex; gap: 10px; align-items: baseline; padding: 3px 0; }
-    .char-label {
-      font-size: 11px; color: var(--text3);
-      min-width: 52px; font-family: var(--mono);
-    }
-    .char-text { font-size: 14px; color: var(--text); }
     .subst { color: var(--subst-color); font-weight: 500; }
     .unknown-token { color: var(--text3); opacity: 0.6; }
-
-    .single-rendered { font-size: 14px; color: var(--text); padding: 4px 0; }
-
-    .ref-section {
-      margin-top: 10px; padding-top: 10px;
-      border-top: 0.5px solid var(--border);
-    }
-    .ref-lang-label {
-      font-size: 11px; color: var(--text3);
-      font-family: var(--mono); margin-bottom: 4px;
-    }
-
     .missing { color: var(--text3); font-style: italic; font-size: 12px; }
     .empty-state {
       padding: 2rem; text-align: center;
       color: var(--text2); font-size: 14px;
     }
+
+    /* ── Result table ── */
+    .result-table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 6px;
+      font-size: 14px;
+    }
+    .result-table td {
+      padding: 3px 12px 3px 0;
+      vertical-align: baseline;
+      line-height: 1.5;
+    }
+    .result-table td:last-child { padding-right: 0; }
+    .col-char {
+      font-size: 11px; color: var(--text3);
+      font-family: var(--mono);
+      white-space: nowrap;
+      width: 56px;
+    }
+    .col-en { color: var(--text2); }
+    .col-tr { color: var(--text); }
+
+    /* kit rows above table */
+    .kit-row {
+      display: flex; gap: 10px; align-items: baseline;
+      padding: 3px 0;
+    }
+    .kit-lang {
+      font-size: 11px; color: var(--text3);
+      font-family: var(--mono); min-width: 52px;
+    }
+    .kit-text { font-size: 14px; color: var(--text2); }
+    .kit-token { color: var(--token-color); font-weight: 500; }
   </style>
 </head>
 <body>
@@ -313,7 +332,6 @@ let accessToken = null;
 let appData = null;
 let selectedToken = null;
 let mainLang = 'en-US';
-let refLang = null;
 let filterText = '';
 
 // ── Auth ──────────────────────────────────────────────────────────────────
@@ -498,41 +516,59 @@ function langHasData(lang) {
   return appData.availLangs.includes(lang);
 }
 
-function renderContextBlock(entry, lang) {
-  const kitText = entry.texts[lang] || '';
-  const needsPerChar = textNeedsPerChar(kitText);
-  let renderedBlock = '';
-  if (needsPerChar) {
-    renderedBlock = `<div class="rendered-block">${
-      CHARACTERS.map(char => `<div class="char-row">
-        <span class="char-label">${char}</span>
-        <span class="char-text">${renderSubstituted(kitText, lang, char)}</span>
-      </div>`).join('')
-    }</div>`;
-  } else {
-    renderedBlock = `<div class="single-rendered">${renderSubstituted(kitText, lang, null)}</div>`;
-  }
-  return `
-    <div class="row-kit">
-      <span class="lang-label">${lang}</span>
-      <span class="kit-text">${highlightTokens(kitText)}</span>
-    </div>
-    ${renderedBlock}`;
+function textNeedsPerChar(text) {
+  return (text.match(TOKEN_RE) || []).some(m => appData.tokens[m]?.type === 'per_char');
 }
 
 function renderDetail(tokenName) {
   const entries = appData.textsByToken[tokenName] || [];
   if (!entries.length) return `<div class="empty-state">This token doesn't appear in any string in «Textos».</div>`;
+  const showTwoLangs = mainLang !== 'en-US';
+
   return entries.map(entry => {
-    const refBlock = refLang ? `<div class="ref-section">
-      <div class="ref-lang-label">${LANG_LABELS[refLang] || refLang} (translation reference)</div>
-      ${renderContextBlock(entry, refLang)}
-    </div>` : '';
+    const enText  = entry.texts['en-US'] || '';
+    const trText  = showTwoLangs ? (entry.texts[mainLang] || '') : '';
+    const needsPerChar = textNeedsPerChar(enText) || (showTwoLangs && textNeedsPerChar(trText));
+
+    // Kit rows
+    let kitRows = `<div class="kit-row">
+      <span class="kit-lang">en-US</span>
+      <span class="kit-text">${highlightTokens(enText)}</span>
+    </div>`;
+    if (showTwoLangs) {
+      kitRows += `<div class="kit-row">
+        <span class="kit-lang">${mainLang}</span>
+        <span class="kit-text">${highlightTokens(trText)}</span>
+      </div>`;
+    }
+
+    // Result table
+    let tableRows = '';
+    if (needsPerChar) {
+      tableRows = CHARACTERS.map(char => {
+        const enRendered = renderSubstituted(enText, 'en-US', char);
+        const trRendered = showTwoLangs ? renderSubstituted(trText, mainLang, char) : '';
+        return `<tr>
+          <td class="col-char">${char}</td>
+          <td class="col-en">${enRendered}</td>
+          ${showTwoLangs ? `<td class="col-tr">${trRendered}</td>` : ''}
+        </tr>`;
+      }).join('');
+    } else {
+      const enRendered = renderSubstituted(enText, 'en-US', null);
+      const trRendered = showTwoLangs ? renderSubstituted(trText, mainLang, null) : '';
+      tableRows = `<tr>
+        <td class="col-char"></td>
+        <td class="col-en">${enRendered}</td>
+        ${showTwoLangs ? `<td class="col-tr">${trRendered}</td>` : ''}
+      </tr>`;
+    }
+
     return `<div class="context-card">
       <div class="context-id">${entry.locaID}</div>
       <div class="context-body">
-        ${renderContextBlock(entry, mainLang)}
-        ${refBlock}
+        ${kitRows}
+        <table class="result-table"><tbody>${tableRows}</tbody></table>
       </div>
     </div>`;
   }).join('');
@@ -574,12 +610,6 @@ function renderApp() {
   }
   langSelect.value = mainLang;
 
-  const refOptions = `<option value="">— none —</option>` + LANGS.map(l => {
-    if (l === mainLang) return '';
-    const has = langHasData(l);
-    return `<option value="${l}" ${refLang===l?'selected':''} ${!has?'disabled':''}>${LANG_LABELS[l]}${!has?' (no data)':''}</option>`;
-  }).join('');
-
   if (selectedToken) {
     // Show detail toolbar in header
     headerDetail.classList.add('visible');
@@ -601,10 +631,6 @@ function renderApp() {
       <div style="display:flex;align-items:center;gap:8px;margin-bottom:16px">
         ${badge}
         <span class="count-tag">${count} string${count!==1?'s':''}</span>
-        <div style="margin-left:auto">
-          <label style="font-size:13px;color:var(--text2);margin-right:6px">Translation reference</label>
-          <select onchange="refLang=this.value||null;renderApp()">${refOptions}</select>
-        </div>
       </div>
       <div class="detail-panel">
         ${renderDetail(selectedToken)}
